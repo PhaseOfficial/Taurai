@@ -13,11 +13,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.48.1",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.84.0",
     "axios": "^1.7.9",
     "framer-motion": "^11.14.4",
     "gsap": "^3.12.5",
     "ldrs": "^1.0.2",
+    "lucide-react": "^0.554.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-fast-marquee": "^1.6.5",
