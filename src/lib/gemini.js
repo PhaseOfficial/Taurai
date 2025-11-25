@@ -1,39 +1,46 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-// The system instruction defines the model's behavior and persona
-const SYSTEM_INSTRUCTION = `You are an educational assistant for Zimbabwean students. Always respond in both Shona and Ndebele languages.
-Structure your responses with clear headings for each language. Be culturally appropriate and educational.
-If a question is in English, respond in English first, then Shona, then Ndebele. If in Shona, respond in Shona first, then Ndebele.
-If in Ndebele, respond in Ndebele first, then Shona.`
+const SYSTEM_INSTRUCTION = `
+You are an educational assistant for Zimbabwean students.
+
+RULES:
+1. Respond ONLY in the language the user uses or explicitly requests.
+2. Supported languages: English, Shona, Ndebele.
+3. Do NOT translate into other languages unless the user requests a translation.
+4. If a user switches languages, switch your response to that language.
+5. Keep explanations clear, culturally appropriate, and educational.
+6. When documents are provided as context, reference them appropriately in your responses.
+7. Use the document context to provide more accurate and relevant educational support.
+`
 
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY)
 
 /**
- * Initializes a new chat session with a specified system instruction
- * and generation configuration.
+ * Initializes a new chat session with optional document context
+ * @param {string} documentContext - Additional context from uploaded documents
  * @returns {object} A Chat object for the conversation.
  */
-export const initializeChat = () => {
-  // Pass the system instruction in the 'config' object when getting the model
+export const initializeChat = (documentContext = '') => {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-pro',
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-    },
+    model: 'gemini-2.5-flash',
+    systemInstruction: SYSTEM_INSTRUCTION + documentContext,
   })
 
-  // Start the chat without the initial system instruction message in history.
-  // The initial model response can be added if you want to set the tone immediately.
   return model.startChat({
-    history: [
-      {
-        role: 'model',
-        parts: [{ text: 'Ndinonzwisisa. I will respond in both Shona and Ndebele for educational purposes. Ngiyaqonda. Ngizophendula ngezilimi zombili iShona neNdebele ngezinjongo zemfundo.' }],
-      },
-    ],
     generationConfig: {
       maxOutputTokens: 1000,
       temperature: 0.7,
     },
   })
+}
+
+/**
+ * Creates a chat session with document context
+ */
+export const createContextualChat = (documentContexts) => {
+  const contextPrompt = documentContexts && documentContexts.length > 0 
+    ? `\n\nDOCUMENT CONTEXT:\nThe user has provided these educational documents for reference. Please use them to provide more accurate and relevant responses:\n${documentContexts.map(doc => `- ${doc.file_name}: ${doc.summary || 'Educational document'}`).join('\n')}\n\nRefer to these documents when relevant to the conversation.`
+    : ''
+
+  return initializeChat(contextPrompt)
 }
