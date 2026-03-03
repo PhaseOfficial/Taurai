@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { supabase } from './supabaseClient'
 
 const SYSTEM_INSTRUCTION = `
 You are an educational assistant for Zimbabwean students.
@@ -13,25 +13,69 @@ RULES:
 7. Use the document context to provide more accurate and relevant educational support.
 `
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY)
+/**
+ * Sends a message to the Supabase Edge Function
+ * @param {Array} messages - Array of message objects {sender, text} or {role, content}
+ * @param {string} systemPrompt - The system prompt/instruction
+ * @returns {Promise<string>} The AI response
+ */
+export const callChatAI = async (messages, systemPrompt = SYSTEM_INSTRUCTION) => {
+  // Normalize messages to {sender, text} for the edge function
+  const normalizedMessages = messages.map(m => ({
+    sender: (m.role === 'model' || m.sender === 'ai' || m.sender === 'assistant') ? 'assistant' : 'user',
+    text: m.content || m.text
+  }))
+
+  try {
+    const { data, error } = await supabase.functions.invoke('chat-ai', {
+      body: {
+        messages: normalizedMessages,
+        systemPrompt
+      }
+    })
+
+    if (error) throw error
+    return data.reply
+  } catch (error) {
+    console.error('Error calling chat-ai edge function:', error)
+    throw error
+  }
+}
 
 /**
  * Initializes a new chat session with optional document context
+ * Compatible with existing ChatInterface.jsx usage
  * @param {string} documentContext - Additional context from uploaded documents
+ * @param {Array} initialHistory - Optional starting messages
  * @returns {object} A Chat object for the conversation.
  */
-export const initializeChat = (documentContext = '') => {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    systemInstruction: SYSTEM_INSTRUCTION + documentContext,
-  })
+export const initializeChat = (documentContext = '', initialHistory = []) => {
+  let history = [...initialHistory]
+  const systemPrompt = SYSTEM_INSTRUCTION + documentContext
 
-  return model.startChat({
-    generationConfig: {
-      maxOutputTokens: 1000,
-      temperature: 0.7,
-    },
-  })
+  return {
+    sendMessage: async (text) => {
+      // Add user message to history
+      history.push({ role: 'user', content: text })
+      
+      try {
+        const reply = await callChatAI(history, systemPrompt)
+        
+        // Add assistant response to history
+        history.push({ role: 'model', content: reply })
+        
+        return {
+          response: {
+            text: () => Promise.resolve(reply)
+          }
+        }
+      } catch (error) {
+        // Remove the failed user message if you want to allow retry
+        // history.pop() 
+        throw error
+      }
+    }
+  }
 }
 
 /**
